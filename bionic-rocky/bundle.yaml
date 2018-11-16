@@ -1,0 +1,552 @@
+# vim: set ts=2 et:
+# 10.0.4.1/22
+# 10.0.4.1 - 10.0.7.254
+# Gateway: 10.0.4.1
+# Bifrost: 10.0.4.2
+# DHCP range: 10.0.4.100 -> 10.0.4.254
+# VIP range: 10.0.5.1 -> 10.0.5.254
+# Floating IP rangs: 10.0.6.1 -> 10.0.6.254
+---
+
+options:
+  # This is Management network, unrelated to OpenStack and other applications
+  # OAM - Operations, Administration and Maintenance
+  oam-space:           &oam-space           deployment
+
+  # This is OpenStack Admin network; for adminURL endpoints
+  admin-space:         &admin-space         deployment
+
+  # This is OpenStack Public network; for publicURL endpoints
+  public-space:        &public-space        extpublic
+
+  # This is OpenStack Internal network; for internalURL endpoints
+  internal-space:      &internal-space      internal
+
+  # This is the overlay network
+  overlay-space:       &overlay-space       internal
+
+  # CEPH configuration
+  # CEPH access network
+  ceph-public-space:   &ceph-public-space   public
+
+  # CEPH replication network
+  ceph-cluster-space:  &ceph-cluster-space  cluster
+
+  # Workaround for 'only one default binding supported'
+  oam-space-constr:    &oam-space-constr    spaces=deployment
+  ceph-access-constr:  &ceph-access-constr  spaces=public
+
+  # Ceph
+  osd-devices: &osd-devices /dev/sdb
+  # Nova Compute
+  # ephemeral-device: &ephemeral-device /dev/sdb
+  # Installation options
+  openstack-origin: &openstack-origin "cloud:bionic-rocky"
+# Skipping keeping charms
+# OpenStack options
+  region: &region nplstack
+#  disk-allocation_ratio: &disk-allocation_ratio '2.0'
+#  ram-allocation-ratio: &ram-allocation-ratio '4.0'
+#  cpu-allocation-ratio: &cpu-allocation-ratio '8.0'
+#  # Neutron options
+  flat-network-providers: &flat-network-providers physnet1
+  bridge-mappings: &bridge-mappings physnet1:br-ex
+  ngw-data-port: &ngw-data-port br-ex:eno2
+  ovs-data-port: &ovs-data-port br-ex:eno2
+#  # This is the setting for forward DNS lookups. Set to the MAAS server.
+#  dns-servers: &dns-servers 10.30.0.1
+#  # # HAproxy options
+#  # haproxy-client-timeout: &haproxy-client-timeout 90000
+#  # haproxy-server-timeout: &haproxy-server-timeout 90000
+#  # haproxy-connect-timeout: &haproxy-connect-timeout 9000
+#  # haproxy-queue-timeout: &haproxy-queue-timeout 9000
+#  # SimpleStreams Sync
+  mirror-list: &mirror-list "[{url: 'http://cloud-images.ubuntu.com/releases/',
+                              name_prefix: 'ubuntu:released',
+                              path: 'streams/v1/index.sjson', max: 1,
+                              item_filters: ['release~(trusty|xenial|bionic)',
+                                             'arch~(x86_64|amd64)',
+                                             'ftype~(disk1.img|disk.img)']},
+                              {url: 'http://cloud-images.ubuntu.com/daily/',
+                               name_prefix: 'ubuntu:daily',
+                               path: 'streams/v1/index.sjson',
+                               max: 5,
+                               item_filters: ['release~(trusty|xenial|bionic)',
+                                              'arch~(x86_64|amd64)',
+                                              'ftype~(disk1.img|disk.img)']}]"
+#  # HA Cluster options
+#  monitor_host: &monitor_host 10.0.4.1
+
+series: bionic
+
+machines:
+  0:
+    series: bionic
+#    constraints: tags=^nuc
+  1:
+    series: bionic
+#    constraints: tags=^nuc
+  2:
+    series: bionic
+#    constraints: tags=^nuc
+  3:
+    series: bionic
+#    constraints: tags=^nuc
+  4:
+    series: bionic
+#    constraints: tags=nuc
+#  5:
+#    # series: bionic
+#    constraints: tags=nuc
+#  6:
+#    # series: bionic
+#    constraints: tags=nuc
+
+applications:
+  mysql:
+    charm: cs:~openstack-charmers-next/percona-cluster
+    bindings:
+      "": *oam-space
+      cluster: *internal-space
+      shared-db: *internal-space
+    options:
+      innodb-buffer-pool-size: 256M
+      max-connections: 1000
+    num_units: 1
+    to:
+      - lxd:4
+  rabbitmq-server:
+    charm: cs:~openstack-charmers-next/rabbitmq-server
+    bindings:
+      "": *oam-space
+      amqp: *internal-space
+      cluster: *internal-space
+    num_units: 1
+    options:
+      management_plugin: True
+      source: *openstack-origin
+    to:
+      - lxd:1
+  ceph-osd:
+    charm: cs:~openstack-charmers-next/ceph-osd
+    bindings:
+      "": *oam-space
+      public: *ceph-public-space
+      cluster: *ceph-cluster-space
+    num_units: 3
+    options:
+      source: *openstack-origin
+      osd-devices: *osd-devices
+    to:
+      - 0
+      - 1
+      - 2
+  ceph-mon:
+    charm: cs:~openstack-charmers-next/ceph-mon
+    bindings:
+      "": *oam-space
+      public: *ceph-public-space
+    num_units: 3
+    options:
+      expected-osd-count: 3
+      source: *openstack-origin
+    to:
+      - lxd:1
+      - lxd:2
+      - lxd:3
+  ceph-radosgw:
+    charm: cs:~openstack-charmers-next/ceph-radosgw
+    constraints: *ceph-access-constr
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      mon: *ceph-public-space
+    num_units: 1
+    options:
+      source: *openstack-origin
+      region: *region
+#      vip: 194.47.157.200
+      ceph-osd-replication-count: 2
+    to:
+      - lxd:0
+#      - lxd:1
+#      - lxd:2
+  keystone:
+    charm: cs:~openstack-charmers-next/keystone
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    num_units: 1
+    options:
+      openstack-origin: *openstack-origin
+      region: *region
+#      vip: 194.47.157.201
+      token-provider: fernet
+    to:
+      # - lxd:5
+      # - lxd:4
+      - lxd:3
+  openstack-dashboard:
+    charm: openstack-dashboard
+    constraints: *oam-space-constr
+    bindings:
+      "": *public-space
+      shared-db: *internal-space
+    num_units: 1
+    options:
+      openstack-origin: *openstack-origin
+ #     vip: 194.47.157.202
+    to:
+      # - lxd:0
+      - lxd:1
+      # - lxd:2
+  nova-compute:
+    charm: cs:~openstack-charmers-next/nova-compute
+    bindings:
+      "": *oam-space
+      internal: *internal-space
+      # TODO - is this required?
+      ceph: *ceph-public-space
+      ceph-access: *ceph-public-space
+    num_units: 3
+    options:
+      enable-live-migration: true
+      enable-resize: true
+      migration-auth-type: ssh
+      openstack-origin: *openstack-origin
+      ceph-osd-replication-count: 2
+      libvirt-image-backend: rbd
+      cpu-mode: host-passthrough
+    to:
+      - 0
+      - 1
+      - 2
+  nova-cloud-controller:
+    charm: cs:~openstack-charmers-next/nova-cloud-controller
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    num_units: 1
+    options:
+      network-manager: Neutron
+      openstack-origin: *openstack-origin
+      region: *region
+      console-access-protocol: novnc
+    to:
+      - lxd:2
+      # - lxd:3
+      # - lxd:4
+  neutron-gateway:
+    charm: cs:~openstack-charmers-next/neutron-gateway
+    bindings:
+      "": *oam-space
+      data: *overlay-space
+    # series: xenial
+    num_units: 1
+    options:
+      data-port: *ngw-data-port
+      flat-network-providers: *flat-network-providers
+      openstack-origin: *openstack-origin
+      bridge-mappings: *bridge-mappings
+    to:
+      - 0
+  neutron-api:
+    charm: cs:~openstack-charmers-next/neutron-api
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    num_units: 1
+    options:
+      overlay-network-type: 'gre vxlan'
+#      l2-population: true
+      flat-network-providers: *flat-network-providers
+      neutron-security-groups: true
+#      enable-dvr: true
+#      enable-ml2-port-security: True
+      openstack-origin: *openstack-origin
+      region: *region
+    to:
+      # - lxd:3
+      # - lxd:0
+      # - lxd:5
+      - lxd:1
+  neutron-openvswitch:
+    charm: cs:~openstack-charmers-next/neutron-openvswitch
+    bindings:
+      data: *overlay-space
+    options:
+      enable-local-dhcp-and-metadata: True
+      # flat-network-providers: *flat-network-providers
+      data-port: *ovs-data-port
+      bridge-mappings: *bridge-mappings
+#      dns-servers: *dns-servers
+  cinder:
+    charm: cs:~openstack-charmers-next/cinder
+    constraints: *ceph-access-constr
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    num_units: 1
+    options:
+      block-device: None
+      glance-api-version: 2
+      openstack-origin: *openstack-origin
+      region: *region
+    to:
+      - lxd:0
+      # - lxd:1
+      # - lxd:3
+  cinder-ceph:
+    charm: cs:~openstack-charmers-next/cinder-ceph
+    bindings:
+      "": *oam-space
+      ceph-access: *internal-space
+      ceph: *internal-space
+    num_units: 0
+    options:
+      ceph-osd-replication-count: 2
+  glance:
+    charm: cs:~openstack-charmers-next/glance
+    constraints: *ceph-access-constr
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    num_units: 1
+    # constraints: mem=1G
+    options:
+      openstack-origin: *openstack-origin
+      region: *region
+    to:
+      - lxd:2
+  # glance-simplestreams-sync:
+  #   charm: cs:~openstack-charmers-next/glance-simplestreams-sync
+  #   constraints: *ceph-access-constr
+  #   bindings:
+  #     "": *oam-space
+  #   num_units: 1
+  #   options:
+  #     user_agent: "Homestack Cloud"
+  #     cloud_name: homestack
+  #     mirror_list: *mirror-list
+  #     # hypervisor_mapping: true
+  #     region: *region
+  #     # https://bugs.launchpad.net/bugs/1686437
+  #     source: 'ppa:simplestreams-dev/trunk'
+  #     use_swift: True
+  #   to:
+  #     - lxd:3
+
+  # HA Cluster stuff
+
+  # hacluster-keystone:
+  #   charm: cs:hacluster
+  #   options:
+  #     monitor_host: *monitor_host
+  # hacluster-nova-cc:
+  #   charm: cs:hacluster
+  #   options:
+  #     monitor_host: *monitor_host
+  # hacluster-dashboard:
+  #   charm: cs:hacluster
+  #   options:
+  #     monitor_host: *monitor_host
+  # hacluster-glance:
+  #   charm: cs:hacluster
+  #   options:
+  #     monitor_host: *monitor_host
+  # hacluster-cinder:
+  #   charm: cs:hacluster
+  #   options:
+  #     monitor_host: *monitor_host
+  # hacluster-neutron-api:
+  #   charm: cs:hacluster
+  #   options:
+  #     monitor_host: *monitor_host
+  # hacluster-ceph-radosgw:
+  #   charm: cs:hacluster
+  #   options:
+  #     monitor_host: *monitor_host
+
+
+#  # Monitoring
+#  prometheus:
+#     charm: cs:prometheus2
+#     series: bionic
+#     bindings:
+#       "": *oam-space
+#     num_units: 1
+#     options:
+#       static-targets: "10.0.4.2:9103"
+#       # scrape-jobs: |
+#       #   - job_name: 'juju'
+#       #     metrics_path: '/introspection/metrics'
+#       #     scheme: https
+#       #     static_configs:
+#       #       - targets: ['10.0.7.69:17070']
+#       #     basic_auth:
+#       #       username: 'user-prometheus'
+#       #       password: 'prometheus'
+#       #     tls_config:
+#       #       ca_file: '/var/snap/prometheus/common/juju-ca.crt'
+#     to:
+#       - lxd:4
+#   prometheus-openstack-exporter:
+#     charm: cs:prometheus-openstack-exporter
+#     bindings:
+#       "": *oam-space
+#     num_units: 1
+#     options:
+# #      ram-allocation-ratio: *ram-allocation-ratio
+# #      cpu-allocation-ratio: *cpu-allocation-ratio
+# #      disk-allocation-ratio: *disk-allocation_ratio
+#     to:
+#       - lxd:4
+#   ceph-exporter:
+#     charm: cs:prometheus-ceph-exporter-3
+#     num_units: 1
+#     to:
+#       - lxd:0
+#     bindings:
+#       "": *oam-space
+#       ceph: *ceph-public-space
+#   grafana:
+#     charm: cs:~prometheus-charmers/grafana
+#     series: bionic
+#     bindings:
+#       "": *oam-space
+#     options:
+#       port: "3000"  # XXX: bug 1752960
+#     num_units: 1
+#     to:
+#     - lxd:1
+#   telegraf-bionic:
+#     charm: cs:telegraf
+#     bindings:
+#       # overrides private-address exposed to prometheus
+#       prometheus-client: *oam-space
+#     options:
+#       hostname: "{host}"
+#       extra_packages: 'lm-sensors'
+#       extra_plugins: |
+#         [[inputs.sensors]]
+  # telegraf-xenial:
+  #   charm: cs:telegraf
+  #   series: xenial
+  #   bindings:
+  #     # overrides private-address exposed to prometheus
+  #     prometheus-client: *oam-space
+  #   options:
+  #     hostname: "{host}"
+  #     extra_packages: 'lm-sensors'
+  #     extra_plugins: |
+  #       [[inputs.sensors]]
+relations:
+  - [ keystone, mysql ]
+  - [ neutron-api, mysql ]
+  - [ neutron-api, rabbitmq-server ]
+  - [ neutron-api, nova-cloud-controller ]
+  - [ neutron-api, neutron-openvswitch ]
+  - [ neutron-api, keystone ]
+  - [ neutron-openvswitch, nova-compute ]
+  - [ neutron-openvswitch, rabbitmq-server ]
+  - [ "nova-cloud-controller:shared-db", mysql ]
+  - [ "nova-cloud-controller:amqp", rabbitmq-server ]
+  - [ nova-cloud-controller, glance ]
+  - [ nova-cloud-controller, keystone ]
+  - [ nova-compute, nova-cloud-controller ]
+  - - nova-compute
+    - rabbitmq-server:amqp
+  - - nova-compute:ceph-access
+    - cinder-ceph
+  - [ nova-compute, glance ]
+  - [ nova-compute, ceph-mon ]
+  - [ ceph-mon, ceph-osd ]
+  - [ ceph-mon, ceph-radosgw ]
+  - - ceph-radosgw:identity-service
+    - keystone:identity-service
+  - [ glance, mysql ]
+  - [ glance, keystone ]
+  - [ glance, ceph-mon ]
+  - [ glance, "cinder:image-service" ]
+  - [ cinder, mysql ]
+  - [ cinder, rabbitmq-server ]
+  - [ cinder, nova-cloud-controller ]
+  - [ cinder, keystone ]
+  - [ cinder, cinder-ceph ]
+  - [ cinder-ceph, ceph-mon ]
+  - [ "openstack-dashboard:identity-service", keystone ]
+#  - - glance-simplestreams-sync:amqp
+#    - rabbitmq-server:amqp
+#  - - glance-simplestreams-sync:identity-service
+#    - keystone:identity-service
+
+  # Neutron Gateway relations
+
+  - - neutron-gateway:amqp
+    - rabbitmq-server:amqp
+  - - neutron-gateway:quantum-network-service
+    - nova-cloud-controller:quantum-network-service
+  - - neutron-gateway:neutron-plugin-api
+    - neutron-api:neutron-plugin-api
+
+  # HA Stuff
+  # - - keystone:ha
+  #   - hacluster-keystone:ha
+  # - - glance:ha
+  #   - hacluster-glance:ha
+  # - - cinder:ha
+  #   - hacluster-cinder:ha
+  # - - neutron-api:ha
+  #   - hacluster-neutron-api:ha
+  # - - nova-cloud-controller:ha
+  #   - hacluster-nova-cc:ha
+  # - - openstack-dashboard:ha
+  #   - hacluster-dashboard:ha
+  # - - ceph-radosgw:ha
+  #   - hacluster-ceph-radosgw:ha
+
+    # if I want to make percona HA
+  # - - mysql:ha
+  #   - hacluster-mysql:ha
+
+  # # Monitoring stuff
+  # - - prometheus-openstack-exporter:identity-credentials
+  #   - keystone
+
+  # # Prometheus relations
+
+  # - - ceph-exporter
+  #   - prometheus:target
+  # - - prometheus-openstack-exporter
+  #   - prometheus:target
+  # # - - prometheus:target
+  # #   - telegraf-xenial:prometheus-client
+  # - - prometheus:target
+  #   - telegraf-bionic:prometheus-client
+  # - - prometheus:grafana-source
+  #   - grafana:grafana-source
+  # ## Telegraf
+  # - - prometheus:juju-info
+  #   - telegraf-bionic:juju-info
+  # - - nova-compute:juju-info
+  #   - telegraf-bionic:juju-info
+  # - - neutron-gateway:juju-info
+  #   - telegraf-bionic:juju-info
+  #   # - telegraf-xenial:juju-info

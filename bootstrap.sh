@@ -55,15 +55,15 @@ if [ $version = "queen2" ]; then
     # Queen
     echo "Doing Queen ver2"
     series='bionic'
-    juju deploy cs:bundle/openstack-base-57 --bind $defspaces
+    juju deploy cs:bundle/openstack-base-58 
 fi
 
 if [ $version = "rocky" ]; then  
     # Queen
-    echo "Doing Queen ver2"
+    echo "Doing Rocky ver2"
     series='bionic'
     ## NOTE; Config spaces in bundle config, until --bind works  
-    juju deploy bionic-rocky/bundle-base57.yaml 
+    juju deploy ./bionic-rocky/os-nplstack.yaml 
 fi
 
 
@@ -125,6 +125,24 @@ echo "Launch another screen/terminal, wait for deployment and cfg to complete.Th
 echo "As long as "
 echo "juju wait juju wait --model $modelname"
 echo "does not work."
+
+echo "Wait for user input"
+echo "Fix DNS issue in containers (Bionic)."
+echo " append in /etc/netplan/99-juju.yaml;"
+echo "search: [maas] "
+echo "after nameservers, before addressess"
+echo "juju ssh 2/lxd/2  sed -i '/nameservers:/a          search: [maas]' /etc/netplan/99-juju.yaml"
+echo "juju ssh 2/lxd/2 sudo netplan apply"
+#juju ssh 2/lxd/2  sed -i '/nameservers:/a          search: [maas]' /etc/netplan/99-juju.yaml
+#juju ssh 2/lxd/2 sudo netplan apply
+echo "Fix nova-api-metadata"
+echo "juju ssh 0 "
+echo "sudo su -"
+echo "systemctl unmask nova-api-metadata.service"
+echo "systemctl start nova-api-metadata.service"
+echo "systemctl status nova-api-metadata.service"
+
+
 read -p "Press any key to continue"
 #
 
@@ -191,8 +209,8 @@ fi
 if [ $version = "queen2" ]; then  
     #Queen
     echo "Queen version bundle"
-    . bundle57/openrc
-    bundle=bundle57
+    . bundle58/openrc
+    bundle=bundle58
 fi
 
 if [ $version = "rocky" ]; then  

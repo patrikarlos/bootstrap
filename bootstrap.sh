@@ -66,8 +66,14 @@ if [ $version = "rocky" ]; then
     juju deploy ./bionic-rocky/os-nplstack.yaml 
 fi
 
-
-
+if [ $version = "stein" ]; then  
+    # Queen
+    echo "Doing Stein"
+    series='bionic'
+    ## NOTE; Config spaces in bundle config, until --bind works
+    #cs:bundle/openstack-base-59
+    juju deploy ./bundle61/bundle.yaml  --overlay ./bundle61/openstack-base-spaces-overlay.yaml
+fi
 
 
 
@@ -124,6 +130,7 @@ juju config neutron-api global-physnet-mtu=9000
 echo "Launch another screen/terminal, wait for deployment and cfg to complete.Then " 
 echo "As long as "
 echo "juju wait juju wait --model $modelname"
+juju wait juju wait --model $modelname
 echo "does not work."
 
 echo "Wait for user input"
@@ -152,24 +159,25 @@ echo "Openstack deployed"
 echo "Wait some time... 60s to stabilize."
 sleep 60
 
-echo "Check Ceph"
-pools=$(sudo ceph osd pool ls)
-
-if [[ $pools  != *"nova-compute"* ]]; then
-    echo "Creating nova-compute pool"
-    sudo ceph osd pool create nova-compute 64
-fi
-
-if [[ $pools  != *"glance"* ]]; then
-    echo "Creating glance pool"
-    sudo ceph osd pool create glance 64
-fi
-
-if [[ $pools  != *"cinder-ceph"* ]]; then
-    echo "Creating cinder-ceph pool"
-    sudo ceph osd pool create cinder-ceph 64
-fi
-
+#
+#echo "Check Ceph"
+#pools=$(sudo ceph osd pool ls)
+#
+#if [[ $pools  != *"nova-compute"* ]]; then
+#    echo "Creating nova-compute pool"
+#    sudo ceph osd pool create nova-compute 64
+#fi
+#
+#if [[ $pools  != *"glance"* ]]; then
+#    echo "Creating glance pool"
+#    sudo ceph osd pool create glance 64
+#fi
+#
+#if [[ $pools  != *"cinder-ceph"* ]]; then
+#    echo "Creating cinder-ceph pool"
+#    sudo ceph osd pool create cinder-ceph 64
+#fi
+#
     
 
 
@@ -208,16 +216,23 @@ fi
 
 if [ $version = "queen2" ]; then  
     #Queen
-    echo "Queen version bundle"
+    echo "Queen2 version bundle"
     . bundle58/openrc
     bundle=bundle58
 fi
 
 if [ $version = "rocky" ]; then  
     #Queen
-    echo "Queen version bundle"
+    echo "Rocky version bundle"
     . bionic-rocky/openrc
     bundle=bionic-rocky
+fi
+
+if [ $version = "stein" ]; then  
+    #Queen
+    echo "Stein version bundle"
+    . bundle61/openrc
+    bundle=bundle61
 fi
 
 
@@ -241,7 +256,6 @@ if [[ $version = "rocky" ]]
 then
     ./$bundle/neutron-tenant-net-ksv3 -p admin -r provider-router --network-type vxlan internal 10.5.5.0/24
 else
-
     ./$bundle/neutron-tenant-net-ksv3 -p admin -r provider-router internal 10.5.5.0/24
 fi
 

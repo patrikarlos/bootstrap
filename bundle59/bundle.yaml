@@ -1,0 +1,389 @@
+variables:
+  data-port: br-ex:eno2
+  expected-mon-count: 3
+  expected-osd-count: 3
+  mysql-connections: 1000
+  worker-multiplier: 0.25
+
+  # This is Management network, unrelated to OpenStack and other applications
+  # OAM - Operations, Administration and Maintenance
+  oam-space: &oam-space deployment
+  # This is OpenStack Admin network; for adminURL endpoints
+  admin-space: &admin-space deployment
+  # This is OpenStack Public network; for publicURL endpoints
+  public-space: &public-space extpublic
+  # This is OpenStack Internal network; for internalURL endpoints
+  internal-space: &internal-space internal
+  # This is the overlay network
+  overlay-space: &overlay-space internal
+  # CEPH configuration
+  # CEPH access network
+  ceph-public-space: &ceph-public-space public
+  # CEPH replication network
+  ceph-cluster-space: &ceph-cluster-space cluster
+  # Workaround for 'only one default binding supported'
+  oam-space-constr: &oam-space-constr spaces=deployment
+  ceph-access-constr: &ceph-access-constr spaces=public
+  # Ceph
+  osd-devices: &osd-devices /dev/sdb
+  # Nova Compute
+  # ephemeral-device: &ephemeral-device /dev/sdb
+  # Installation options
+  openstack-origin: &openstack-origin "cloud:bionic-stein"
+  # Skipping keeping charms
+  # OpenStack options
+  region: &region nplstack
+  #  disk-allocation_ratio: &disk-allocation_ratio '2.0'
+  #  ram-allocation-ratio: &ram-allocation-ratio '4.0'
+  #  cpu-allocation-ratio: &cpu-allocation-ratio '8.0'
+  #  # Neutron options
+  flat-network-providers: &flat-network-providers physnet1
+  bridge-mappings: &bridge-mappings physnet1:br-ex
+  ngw-data-port: &ngw-data-port br-ex:eno2
+  ovs-data-port: &ovs-data-port br-ex:eno2
+  #  # This is the setting for forward DNS lookups. Set to the MAAS server.
+dns-servers: &dns-servers 10.30.0.1
+#  HAproxy options
+#  # haproxy-client-timeout: &haproxy-client-timeout 90000
+#  # haproxy-server-timeout: &haproxy-server-timeout 90000
+#  # haproxy-connect-timeout: &haproxy-connect-timeout 9000
+#  # haproxy-queue-timeout: &haproxy-queue-timeout 9000
+
+machines:
+  '0':
+    series: bionic
+    constraints: cores=6 
+  '1':
+    series: bionic
+    constraints: cores=8     
+  '2':
+    series: bionic
+    constraints: cores=12     
+  '3':
+    series: bionic
+    constraints: cores=32
+    
+relations:
+  - - nova-compute:amqp
+    - rabbitmq-server:amqp
+  - - neutron-gateway:amqp
+    - rabbitmq-server:amqp
+  - - keystone:shared-db
+    - mysql:shared-db
+  - - nova-cloud-controller:identity-service
+    - keystone:identity-service
+  - - glance:identity-service
+    - keystone:identity-service
+  - - neutron-api:identity-service
+    - keystone:identity-service
+  - - neutron-openvswitch:neutron-plugin-api
+    - neutron-api:neutron-plugin-api
+  - - neutron-api:shared-db
+    - mysql:shared-db
+  - - neutron-api:amqp
+    - rabbitmq-server:amqp
+  - - neutron-gateway:neutron-plugin-api
+    - neutron-api:neutron-plugin-api
+  - - glance:shared-db
+    - mysql:shared-db
+  - - glance:amqp
+    - rabbitmq-server:amqp
+  - - nova-cloud-controller:image-service
+    - glance:image-service
+  - - nova-compute:image-service
+    - glance:image-service
+  - - nova-cloud-controller:cloud-compute
+    - nova-compute:cloud-compute
+  - - nova-cloud-controller:amqp
+    - rabbitmq-server:amqp
+  - - nova-cloud-controller:quantum-network-service
+    - neutron-gateway:quantum-network-service
+  - - nova-compute:neutron-plugin
+    - neutron-openvswitch:neutron-plugin
+  - - neutron-openvswitch:amqp
+    - rabbitmq-server:amqp
+  - - openstack-dashboard:identity-service
+    - keystone:identity-service
+  - - openstack-dashboard:shared-db
+    - mysql:shared-db
+  - - nova-cloud-controller:shared-db
+    - mysql:shared-db
+  - - nova-cloud-controller:neutron-api
+    - neutron-api:neutron-api
+  - - cinder:image-service
+    - glance:image-service
+  - - cinder:amqp
+    - rabbitmq-server:amqp
+  - - cinder:identity-service
+    - keystone:identity-service
+  - - cinder:cinder-volume-service
+    - nova-cloud-controller:cinder-volume-service
+  - - cinder-ceph:storage-backend
+    - cinder:storage-backend
+  - - ceph-mon:client
+    - nova-compute:ceph
+  - - nova-compute:ceph-access
+    - cinder-ceph:ceph-access
+  - - cinder:shared-db
+    - mysql:shared-db
+  - - ceph-mon:client
+    - cinder-ceph:ceph
+  - - ceph-mon:client
+    - glance:ceph
+  - - ceph-osd:mon
+    - ceph-mon:osd
+  - - ntp:juju-info
+    - nova-compute:juju-info
+  - - ntp:juju-info
+    - neutron-gateway:juju-info
+  - - ceph-radosgw:mon
+    - ceph-mon:radosgw
+  - - ceph-radosgw:identity-service
+    - keystone:identity-service
+
+series: bionic
+
+services:
+  ceph-mon:
+    annotations:
+      gui-x: '750'
+      gui-y: '500'
+    bindings:
+      "": *oam-space
+      public: *ceph-public-space
+    charm: cs:ceph-mon-36
+    num_units: 3
+    options:
+      expected-osd-count: 3
+      monitor-count: 3
+      source: cloud:bionic-stein
+    to:
+      - lxd:1
+      - lxd:2
+      - lxd:3
+  ceph-osd:
+    annotations:
+      gui-x: '1000'
+      gui-y: '500'
+    bindings:
+      "": *oam-space
+      public: *ceph-public-space
+      cluster: *ceph-cluster-space
+    charm: cs:ceph-osd-280
+    num_units: 3
+    options:
+      osd-devices: /dev/sdb /dev/vdb
+      source: cloud:bionic-stein
+    to:
+      - '1'
+      - '2'
+      - '3'
+  ceph-radosgw:
+    annotations:
+      gui-x: '1000'
+      gui-y: '250'
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      mon: *ceph-public-space
+    charm: cs:ceph-radosgw-265
+    num_units: 1
+    options:
+      source: cloud:bionic-stein
+    to:
+      - lxd:0
+  cinder:
+    annotations:
+      gui-x: '750'
+      gui-y: '0'
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    charm: cs:cinder-282
+    num_units: 1
+    options:
+      block-device: None
+      glance-api-version: 2
+      openstack-origin: cloud:bionic-stein
+      worker-multiplier: 0.25
+    to:
+      - lxd:1
+  cinder-ceph:
+    annotations:
+      gui-x: '750'
+      gui-y: '250'
+    charm: cs:cinder-ceph-240
+    num_units: 0
+  glance:
+    annotations:
+      gui-x: '250'
+      gui-y: '0'
+    bindings:
+      "": *oam-space
+      ceph: *internal-space
+    charm: cs:glance-277
+    num_units: 1
+    options:
+      openstack-origin: cloud:bionic-stein
+      worker-multiplier: 0.25
+    to:
+      - lxd:2
+  keystone:
+    annotations:
+      gui-x: '500'
+      gui-y: '0'
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    charm: cs:keystone-296
+    num_units: 1
+    options:
+      openstack-origin: cloud:bionic-stein
+      worker-multiplier: 0.25
+    to:
+      - lxd:3
+  mysql:
+    annotations:
+      gui-x: '0'
+      gui-y: '250'
+    bindings:
+      "": *oam-space
+      cluster: *internal-space
+      shared-db: *internal-space
+    charm: cs:percona-cluster-274
+    num_units: 1
+    options:
+      innodb-buffer-pool-size: 256M
+      max-connections: 1000
+      performance-schema: true
+    to:
+      - lxd:0
+  neutron-api:
+    annotations:
+      gui-x: '500'
+      gui-y: '500'
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    charm: cs:neutron-api-271
+    num_units: 1
+    options:
+      neutron-security-groups: true
+      openstack-origin: cloud:bionic-stein
+      worker-multiplier: 0.25
+      overlay-network-type: 'vxlan'
+      l2-population: true
+      flat-network-providers: *flat-network-providers
+      enable-dvr: true
+      enable-ml2-port-security: true
+      region: *region
+    to:
+      - lxd:1
+  neutron-gateway:
+    annotations:
+      gui-x: '0'
+      gui-y: '0'
+    bindings:
+      "": *oam-space
+      data: *overlay-space
+
+    charm: cs:neutron-gateway-260
+    num_units: 1
+    options:
+      bridge-mappings: physnet1:br-ex
+      data-port: br-ex:eno2
+      openstack-origin: cloud:bionic-stein
+      worker-multiplier: 0.25
+    to:
+      - '0'
+  neutron-openvswitch:
+    annotations:
+      gui-x: '250'
+      gui-y: '500'
+    charm: cs:neutron-openvswitch-257
+    num_units: 0
+    bindings:
+      data: *overlay-space
+  nova-cloud-controller:
+    annotations:
+      gui-x: '0'
+      gui-y: '500'
+    bindings:
+      "": *oam-space
+      public: *public-space
+      admin: *admin-space
+      internal: *internal-space
+      shared-db: *internal-space
+    charm: cs:nova-cloud-controller-326
+    num_units: 1
+    options:
+      network-manager: Neutron
+      openstack-origin: cloud:bionic-stein
+      worker-multiplier: 0.25
+    to:
+      - lxd:2
+  nova-compute:
+    annotations:
+      gui-x: '250'
+      gui-y: '250'
+    bindings:
+      "": *oam-space
+      internal: *internal-space
+      # TODO - is this required?
+      ceph: *ceph-public-space
+      ceph-access: *ceph-public-space
+    charm: cs:nova-compute-298
+    num_units: 3
+    options:
+      config-flags: default_ephemeral_format=ext4
+      enable-live-migration: true
+      enable-resize: true
+      migration-auth-type: ssh
+      openstack-origin: cloud:bionic-stein
+    to:
+      - '1'
+      - '2'
+      - '3'
+  ntp:
+    annotations:
+      gui-x: '1000'
+      gui-y: '0'
+    charm: cs:ntp-32
+    num_units: 0
+  openstack-dashboard:
+    annotations:
+      gui-x: '500'
+      gui-y: '-250'
+    bindings:
+      "": *public-space
+      shared-db: *internal-space
+    charm: cs:openstack-dashboard-280
+    constraints: *oam-space-constr
+    num_units: 1
+    options:
+      openstack-origin: cloud:bionic-stein
+    to:
+      - lxd:3
+  rabbitmq-server:
+    annotations:
+      gui-x: '500'
+      gui-y: '250'
+    bindings:
+      "": *oam-space
+      amqp: *internal-space
+      cluster: *internal-space
+    charm: cs:rabbitmq-server-87
+    num_units: 1
+    to:
+      - lxd:0

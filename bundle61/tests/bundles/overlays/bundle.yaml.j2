@@ -1,0 +1,71 @@
+machines: {}
+applications:
+  ceph-osd:
+    to: []
+    bindings:
+      "": ""
+    storage:
+      osd-devices: 20GB
+  neutron-gateway:
+    options:
+      bridge-mappings: physnet1:br-ex
+      data-port:
+      openstack-origin: cloud:bionic-stein
+    to: []
+    bindings:
+      "": ""
+  ceph-mon:
+    to: []
+    bindings:
+      "": ""
+  ceph-radosgw:
+    to: []
+    bindings:
+      "": ""
+  cinder:
+    expose: True
+    to: []
+    bindings:
+      "": ""
+  glance:
+    expose: True
+    to: []
+    bindings:
+      "": ""
+  keystone:
+    expose: True
+    to: []
+    bindings:
+      "": ""
+  mysql:
+    to: []
+    bindings:
+      "": ""
+  neutron-api:
+    expose: True
+    to: []
+    bindings:
+      "": ""
+  nova-cloud-controller:
+    expose: True
+    to: []
+    bindings:
+      "": ""
+  nova-compute:
+    annotations:
+    to: []
+    constraints: mem=4G
+    bindings:
+      "": ""
+  openstack-dashboard:
+    expose: True
+    to: []
+    bindings:
+      "": ""
+  rabbitmq-server:
+    to: []
+    bindings:
+      "": ""
+  ntp:
+    bindings:
+      "": ""

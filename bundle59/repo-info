@@ -1,0 +1,6 @@
+commit-sha-1: ff8dd9b1790ef4d02548dc814aced0c77d62a5b0
+commit-short: ff8dd9b
+branch: master
+remote: https://github.com/openstack-charmers/openstack-bundles/
+info-generated: Wed Apr 17 22:34:24 UTC 2019
+note: This file should exist only in a built or released bundle artifact (not in the bundle source code tree).

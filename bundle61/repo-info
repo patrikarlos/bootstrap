@@ -1,0 +1,6 @@
+commit-sha-1: 610e9a2db48b25a41e6b1f5a1c630cc59c169615
+commit-short: 610e9a2
+branch: master
+remote: https://github.com/openstack-charmers/openstack-bundles
+info-generated: Mon 12 Aug 2019 08:59:14 PM UTC
+note: This file should exist only in a built or released bundle artifact (not in the bundle source code tree).
